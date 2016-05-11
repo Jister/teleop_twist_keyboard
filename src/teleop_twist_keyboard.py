@@ -3,63 +3,60 @@ import roslib; roslib.load_manifest('teleop_twist_keyboard')
 import rospy
 
 from geometry_msgs.msg import Twist
+from std_msgs.msg import Empty
 
 import sys, select, termios, tty
 
 msg = """
-Reading from the keyboard  and Publishing to Twist!
+AR Drone control by keyboard
 ---------------------------
 Moving around:
-   u    i    o
-   j    k    l
-   m    ,    .
+   q    w    e
+   a    s    d
+   z    x    c
 
-For Holonomic mode (strafing), hold down the shift key:
+For yaw control, hold down the shift key:
 ---------------------------
-   U    I    O
    J    K    L
-   M    <    >
 
-t : up (+z)
-b : down (-z)
+; : up (+z)
+. : down (-z)
+
+T : takeoff
+L : landing
+P : emergency stop/reset
 
 anything else : stop
 
-q/z : increase/decrease max speeds by 10%
-w/x : increase/decrease only linear speed by 10%
-e/c : increase/decrease only angular speed by 10%
+1/2 : increase/decrease max speeds by 10%
+3/4 : increase/decrease only linear speed by 10%
+5/6 : increase/decrease only angular speed by 10%
 
 CTRL-C to quit
 """
 
 moveBindings = {
-		'i':(1,0,0,0),
-		'o':(1,0,0,-1),
-		'j':(0,0,0,1),
-		'l':(0,0,0,-1),
-		'u':(1,0,0,1),
-		',':(-1,0,0,0),
-		'.':(-1,0,0,1),
-		'm':(-1,0,0,-1),
-		'O':(1,-1,0,0),
-		'I':(1,0,0,0),
-		'J':(0,1,0,0),
-		'L':(0,-1,0,0),
-		'U':(1,1,0,0),
-		'<':(-1,0,0,0),
-		'>':(-1,-1,0,0),
-		'M':(-1,1,0,0),
-		't':(0,0,1,0),
-		'b':(0,0,-1,0),
+		'q':(1,1,0,0),
+		'w':(1,0,0,0),
+		'e':(1,-1,0,0),
+		'a':(0,1,0,0),
+		'd':(0,-1,0,0),
+		'z':(-1,1,0,0),
+		'x':(-1,0,0,0),
+		'c':(-1,-1,0,0),
+		'A':(0,0,0,1),
+		'D':(0,0,0,-1),	
+		';':(0,0,1,0),
+		'.':(0,0,-1,0),		
 	       }
 
 speedBindings={
-		'q':(1.1,1.1),
-		'z':(.9,.9),
-		'w':(1.1,1),
-		'x':(.9,1),
-		'e':(1,1.1),
-		'c':(1,.9),
+		'1':(1.1,1.1),
+		'2':(.9,.9),
+		'3':(1.1,1),
+		'4':(.9,1),
+		'5':(1,1.1),
+		'6':(1,.9),
 	      }
 
 def getKey():
@@ -78,7 +75,11 @@ def vels(speed,turn):
 if __name__=="__main__":
     	settings = termios.tcgetattr(sys.stdin)
 	
-	pub = rospy.Publisher('cmd_vel', Twist, queue_size = 1)
+	vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size = 1)
+	takeoff_pub =rospy.Publisher('/ardrone/takeoff', Empty, queue_size = 1)
+	landing_pub =rospy.Publisher('/ardrone/land', Empty, queue_size = 1)
+	stop_pub =rospy.Publisher('/ardrone/reset', Empty, queue_size = 1)
+
 	rospy.init_node('teleop_twist_keyboard')
 
 	x = 0
@@ -91,6 +92,7 @@ if __name__=="__main__":
 		print msg
 		print vels(speed,turn)
 		while(1):
+			order = Empty()
 			key = getKey()
 			if key in moveBindings.keys():
 				x = moveBindings[key][0]
@@ -105,6 +107,12 @@ if __name__=="__main__":
 				if (status == 14):
 					print msg
 				status = (status + 1) % 15
+			elif key == 'T':
+				takeoff_pub.publish(order)
+			elif key == 'L':
+				landing_pub.publish(order)
+			elif key == 'P':
+				stop_pub.publish(order)
 			else:
 				x = 0
 				y = 0
@@ -116,7 +124,7 @@ if __name__=="__main__":
 			twist = Twist()
 			twist.linear.x = x*speed; twist.linear.y = y*speed; twist.linear.z = z*speed;
 			twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th*turn
-			pub.publish(twist)
+			vel_pub.publish(twist)
 
 	except:
 		print e
@@ -125,7 +133,7 @@ if __name__=="__main__":
 		twist = Twist()
 		twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
 		twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
-		pub.publish(twist)
+		vel_pub.publish(twist)
 
     		termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
 
